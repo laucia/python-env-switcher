@@ -1,5 +1,7 @@
 # Python Env Switcher
 
+[![Build Status](https://dev.azure.com/laucia/python-env-switcher/_apis/build/status%2Flaucia.python-env-switcher?branchName=main)](https://dev.azure.com/laucia/python-env-switcher/_build/latest?definitionId=1&branchName=main)
+
 A small VS Code extension that **switches the selected Python environment to the
 `.venv` that owns the active file**, so Pylance / debug / run track the right
 per-project virtual environment as you move between files in the monorepo.
