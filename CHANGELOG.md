@@ -1,3 +1,10 @@
+## [0.1.1](https://github.com/laucia/python-env-switcher/compare/v0.1.0...v0.1.1) (2026-06-23)
+
+
+### Bug Fixes
+
+* check non-file scheme before bumping the run token ([4272d07](https://github.com/laucia/python-env-switcher/commit/4272d073ab452ae8e9e3e8f18af8f7db58f398f8))
+
 # [0.1.0](https://github.com/laucia/python-env-switcher/compare/v0.0.1...v0.1.0) (2026-06-23)
 
 
