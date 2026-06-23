@@ -61,8 +61,12 @@ jobs:
     pool:
       vmImage: ubuntu-latest
     variables:
+      # GH_TOKEN (the GitHub PAT for pushing tags/commits and creating the
+      # Release) lives in this variable group.
+      - group: VSCode Extension
       # Skip the husky commit-msg hook on semantic-release's bump commit.
-      HUSKY: 0
+      - name: HUSKY
+        value: "0"
     steps:
       - checkout: self
         # semantic-release needs full history + tags to analyze commits.
