@@ -1,0 +1,34 @@
+# Runs the extension test suite on every push to main.
+# VS Code extension tests launch a real (Electron) VS Code instance, which
+# needs a virtual display on Linux — hence xvfb-run.
+
+trigger:
+  branches:
+    include:
+      - main
+
+# Only run on pushes to main, not on pull requests.
+pr: none
+
+pool:
+  vmImage: ubuntu-latest
+
+steps:
+  - task: NodeTool@0
+    inputs:
+      versionSpec: 22.x
+    displayName: Use Node.js 22.x
+
+  - script: npm ci
+    displayName: Install dependencies
+
+  - script: npm run check-types
+    displayName: Type-check
+
+  - script: npm run lint
+    displayName: Lint
+
+  # xvfb-run gives the Electron-based VS Code test host a display.
+  # `npm test` first runs `pretest` (compile-tests + compile + lint) via npm.
+  - script: xvfb-run -a npm test
+    displayName: Run tests
