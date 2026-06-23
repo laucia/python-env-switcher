@@ -51,3 +51,33 @@ jobs:
         displayName: Run tests
         env:
           DISPLAY: ':99'
+
+  # Derive the next version from the Conventional Commits since the last
+  # release, bump package.json/CHANGELOG, tag, and publish a GitHub Release.
+  # Runs once (Linux), only on main, only after every test leg passes.
+  - job: release
+    dependsOn: test
+    condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/main'))
+    pool:
+      vmImage: ubuntu-latest
+    variables:
+      # Skip the husky commit-msg hook on semantic-release's bump commit.
+      HUSKY: 0
+    steps:
+      - checkout: self
+        # semantic-release needs full history + tags to analyze commits.
+        fetchDepth: 0
+        persistCredentials: true
+
+      - task: UseNode@1
+        inputs:
+          version: 22.x
+        displayName: Use Node.js 22.x
+
+      - script: npm ci
+        displayName: Install dependencies
+
+      - script: npx semantic-release
+        displayName: Release
+        env:
+          GH_TOKEN: $(GH_TOKEN)
