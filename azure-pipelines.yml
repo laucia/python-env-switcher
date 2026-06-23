@@ -108,8 +108,6 @@ jobs:
         displayName: Publish to Marketplace
         condition: and(succeeded(), eq(variables['published'], 'true'))
         inputs:
-          # Service connection name must be a compile-time literal — it cannot
-          # come from a variable group (those resolve too late to authorize it).
           azureSubscription: VSCodeMarketplace
           scriptType: bash
           scriptLocation: inlineScript
