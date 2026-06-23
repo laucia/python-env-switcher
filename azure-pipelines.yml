@@ -108,7 +108,9 @@ jobs:
         displayName: Publish to Marketplace
         condition: and(succeeded(), eq(variables['published'], 'true'))
         inputs:
-          azureSubscription: $(MARKETPLACE_SERVICE_CONNECTION)
+          # Service connection name must be a compile-time literal — it cannot
+          # come from a variable group (those resolve too late to authorize it).
+          azureSubscription: VSCodeMarketplace
           scriptType: bash
           scriptLocation: inlineScript
           inlineScript: npx vsce publish --azure-credential
@@ -120,14 +122,11 @@ jobs:
   - job: identity_details
     pool:
       vmImage: ubuntu-latest
-    variables:
-      # MARKETPLACE_SERVICE_CONNECTION (the service connection name) lives here.
-      - group: VSCode Extension
     steps:
       - task: AzureCLI@2
         displayName: Get identity details
         inputs:
-          azureSubscription: $(MARKETPLACE_SERVICE_CONNECTION)
+          azureSubscription: VSCodeMarketplace
           scriptType: pscore
           scriptLocation: inlineScript
           inlineScript: |
