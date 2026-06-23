@@ -1,6 +1,6 @@
-# Runs the extension test suite on every push to main.
-# VS Code extension tests launch a real (Electron) VS Code instance, which
-# needs a virtual display on Linux — hence xvfb-run.
+# Runs the extension test suite on every push to main, across all three
+# platforms. VS Code extension tests launch a real (Electron) VS Code
+# instance; on Linux that needs a virtual display, hence xvfb.
 
 trigger:
   branches:
@@ -10,25 +10,44 @@ trigger:
 # Only run on pushes to main, not on pull requests.
 pr: none
 
-pool:
-  vmImage: ubuntu-latest
+jobs:
+  - job: test
+    strategy:
+      matrix:
+        linux:
+          imageName: ubuntu-latest
+        mac:
+          imageName: macOS-latest
+        windows:
+          imageName: windows-latest
+    pool:
+      vmImage: $(imageName)
+    steps:
+      - task: UseNode@1
+        inputs:
+          version: 22.x
+        displayName: Use Node.js 22.x
 
-steps:
-  - task: NodeTool@0
-    inputs:
-      versionSpec: 22.x
-    displayName: Use Node.js 22.x
+      - script: npm ci
+        displayName: Install dependencies
 
-  - script: npm ci
-    displayName: Install dependencies
+      - script: npm run check-types
+        displayName: Type-check
 
-  - script: npm run check-types
-    displayName: Type-check
+      - script: npm run lint
+        displayName: Lint
 
-  - script: npm run lint
-    displayName: Lint
+      # The Electron-based VS Code test host needs a display; only Linux
+      # agents lack one, so start xvfb there.
+      - bash: |
+          /usr/bin/Xvfb :99 -screen 0 1024x768x24 > /dev/null 2>&1 &
+          disown
+        displayName: Start xvfb (Linux only)
+        condition: and(succeeded(), eq(variables['Agent.OS'], 'Linux'))
 
-  # xvfb-run gives the Electron-based VS Code test host a display.
-  # `npm test` first runs `pretest` (compile-tests + compile + lint) via npm.
-  - script: xvfb-run -a npm test
-    displayName: Run tests
+      # `npm test` first runs `pretest` (compile-tests + compile + lint).
+      # DISPLAY is used only on Linux; it is harmless on macOS/Windows.
+      - script: npm test
+        displayName: Run tests
+        env:
+          DISPLAY: ':99'
