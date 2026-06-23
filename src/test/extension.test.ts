@@ -24,39 +24,39 @@ suite("findNearestVenv", () => {
     return venv;
   }
 
-  test("finds a venv in the file's own directory", () => {
+  test("finds a venv in the file's own directory", async () => {
     const venv = makeVenv(root);
     const file = join(root, "main.py");
-    assert.strictEqual(findNearestVenv(file, root, ".venv"), venv);
+    assert.strictEqual(await findNearestVenv(file, root, ".venv"), venv);
   });
 
-  test("walks up to an ancestor venv", () => {
+  test("walks up to an ancestor venv", async () => {
     const venv = makeVenv(root);
     const sub = join(root, "pkg", "deep");
     mkdirSync(sub, { recursive: true });
     const file = join(sub, "main.py");
-    assert.strictEqual(findNearestVenv(file, root, ".venv"), venv);
+    assert.strictEqual(await findNearestVenv(file, root, ".venv"), venv);
   });
 
-  test("returns the nearest venv when several ancestors have one", () => {
+  test("returns the nearest venv when several ancestors have one", async () => {
     makeVenv(root);
     const sub = join(root, "pkg");
     const nearest = makeVenv(sub);
     const file = join(sub, "main.py");
-    assert.strictEqual(findNearestVenv(file, root, ".venv"), nearest);
+    assert.strictEqual(await findNearestVenv(file, root, ".venv"), nearest);
   });
 
-  test("stops at the workspace root and returns undefined when none found", () => {
+  test("stops at the workspace root and returns undefined when none found", async () => {
     const sub = join(root, "pkg");
     mkdirSync(sub, { recursive: true });
     const file = join(sub, "main.py");
-    assert.strictEqual(findNearestVenv(file, root, ".venv"), undefined);
+    assert.strictEqual(await findNearestVenv(file, root, ".venv"), undefined);
   });
 
-  test("honours a custom venv name", () => {
+  test("honours a custom venv name", async () => {
     const venv = makeVenv(root, "env");
     const file = join(root, "main.py");
-    assert.strictEqual(findNearestVenv(file, root, "env"), venv);
-    assert.strictEqual(findNearestVenv(file, root, ".venv"), undefined);
+    assert.strictEqual(await findNearestVenv(file, root, "env"), venv);
+    assert.strictEqual(await findNearestVenv(file, root, ".venv"), undefined);
   });
 });

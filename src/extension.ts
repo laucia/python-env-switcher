@@ -1,4 +1,4 @@
-import { existsSync } from "node:fs";
+import { access } from "node:fs/promises";
 import { basename, dirname, join, parse } from "node:path";
 
 import * as vscode from "vscode";
@@ -11,13 +11,20 @@ import type {
 
 const CONFIG_SECTION = "pythonEnvSwitcher";
 
-let output: vscode.OutputChannel;
+// A LogOutputChannel gives us timestamps, log levels, and a user-controllable
+// verbosity (Developer: Set Log Level) for free — no hand-rolled formatting.
+let log: vscode.LogOutputChannel;
 // Monotonic token so a slower in-flight switch can't clobber a newer one.
 let runSeq = 0;
 
-function log(message: string): void {
-  const ts = new Date().toISOString().slice(11, 23); // HH:MM:SS.mmm
-  output.appendLine(`${ts} ${message}`);
+/** True if `p` exists, without throwing or blocking the extension host. */
+async function pathExists(p: string): Promise<boolean> {
+  try {
+    await access(p);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 type Scope = "workspaceFolder" | "project" | "file";
@@ -37,12 +44,22 @@ function readSettings(): Settings {
   };
 }
 
+/** The python interpreter inside a venv directory (POSIX or Windows), if any. */
+async function venvInterpreter(venvDir: string): Promise<string | undefined> {
+  const posix = join(venvDir, "bin", "python");
+  if (await pathExists(posix)) {
+    return posix;
+  }
+  const windows = join(venvDir, "Scripts", "python.exe");
+  if (await pathExists(windows)) {
+    return windows;
+  }
+  return undefined;
+}
+
 /** A directory is a venv if it holds a python executable (POSIX or Windows). */
-function isVenvDir(dir: string): boolean {
-  return (
-    existsSync(join(dir, "bin", "python")) ||
-    existsSync(join(dir, "Scripts", "python.exe"))
-  );
+async function isVenvDir(dir: string): Promise<boolean> {
+  return (await venvInterpreter(dir)) !== undefined;
 }
 
 /**
@@ -50,15 +67,15 @@ function isVenvDir(dir: string): boolean {
  * `<venvName>` directory, stopping at (and including) the workspace-folder root.
  * Returns the venv directory path, or undefined if none is found.
  */
-export function findNearestVenv(
+export async function findNearestVenv(
   fileFsPath: string,
   workspaceRoot: string | undefined,
   venvName: string,
-): string | undefined {
+): Promise<string | undefined> {
   let dir = dirname(fileFsPath);
   for (;;) {
     const candidate = join(dir, venvName);
-    if (isVenvDir(candidate)) {
+    if (await isVenvDir(candidate)) {
       return candidate;
     }
     if (workspaceRoot !== undefined && dir === workspaceRoot) {
@@ -68,7 +85,7 @@ export function findNearestVenv(
     if (parent === dir || parent === parse(dir).root) {
       // Reached the filesystem root; check it once then stop.
       const atRoot = join(parent, venvName);
-      return isVenvDir(atRoot) ? atRoot : undefined;
+      return (await isVenvDir(atRoot)) ? atRoot : undefined;
     }
     dir = parent;
   }
@@ -78,33 +95,37 @@ async function switchForEditor(
   editor: vscode.TextEditor | undefined,
 ): Promise<void> {
   if (!editor) {
-    log("skip: no active editor");
+    log.trace("skip: no active editor");
     return;
   }
   if (editor.document.languageId !== "python") {
-    log(`skip: not python (languageId=${editor.document.languageId}) ${editor.document.uri.fsPath}`);
+    log.trace(`skip: not python (languageId=${editor.document.languageId}) ${editor.document.uri.fsPath}`);
     return;
   }
   const seq = ++runSeq;
   const { venvName, scope: scopeSetting, showNotifications } = readSettings();
   const fileUri = editor.document.uri;
   if (fileUri.scheme !== "file") {
-    log(`skip: non-file scheme '${fileUri.scheme}'`);
+    log.trace(`skip: non-file scheme '${fileUri.scheme}'`);
     return;
   }
-  log(`active: ${fileUri.fsPath} (scope=${scopeSetting}, venvName=${venvName})`);
+  log.debug(`active: ${fileUri.fsPath} (scope=${scopeSetting}, venvName=${venvName})`);
 
   const workspaceFolder = vscode.workspace.getWorkspaceFolder(fileUri);
-  const venvDir = findNearestVenv(
+  const venvDir = await findNearestVenv(
     fileUri.fsPath,
     workspaceFolder?.uri.fsPath,
     venvName,
   );
-  if (!venvDir) {
-    log(`  no '${venvName}' found walking up to ${workspaceFolder?.uri.fsPath ?? "<fs root>"}; leaving env unchanged`);
+  if (seq !== runSeq) {
+    log.trace("superseded during venv lookup; aborting");
     return;
   }
-  log(`  nearest venv: ${venvDir}`);
+  if (!venvDir) {
+    log.debug(`no '${venvName}' found walking up to ${workspaceFolder?.uri.fsPath ?? "<fs root>"}; leaving env unchanged`);
+    return;
+  }
+  log.debug(`nearest venv: ${venvDir}`);
 
   try {
     const api = await getEnvExtApi();
@@ -114,21 +135,21 @@ async function switchForEditor(
       vscode.Uri.file(venvDir),
     );
     if (!env) {
-      const interpreter = existsSync(join(venvDir, "bin", "python"))
-        ? join(venvDir, "bin", "python")
-        : join(venvDir, "Scripts", "python.exe");
-      log(`  folder did not resolve; trying interpreter ${interpreter}`);
-      env = await api.resolveEnvironment(vscode.Uri.file(interpreter));
+      const interpreter = await venvInterpreter(venvDir);
+      if (interpreter) {
+        log.debug(`folder did not resolve; trying interpreter ${interpreter}`);
+        env = await api.resolveEnvironment(vscode.Uri.file(interpreter));
+      }
     }
     if (!env) {
-      log(`  could not resolve an environment at ${venvDir}`);
+      log.warn(`could not resolve an environment at ${venvDir}`);
       return;
     }
-    log(`  resolved env: ${env.displayName} (${env.envId.id})`);
+    log.debug(`resolved env: ${env.displayName} (${env.envId.id})`);
 
     // A newer editor change superseded this run while we were awaiting.
     if (seq !== runSeq) {
-      log("  superseded by a newer editor change; aborting");
+      log.trace("superseded by a newer editor change; aborting");
       return;
     }
 
@@ -149,44 +170,44 @@ async function switchForEditor(
         : "no project → file";
     }
     const scopeUri = scope instanceof vscode.Uri ? scope : undefined;
-    log(`  scope: ${scopeDesc} → ${scopeUri?.fsPath ?? "<global>"}`);
+    log.debug(`scope: ${scopeDesc} → ${scopeUri?.fsPath ?? "<global>"}`);
 
     const current = await api.getEnvironment(scopeUri);
-    log(`  current env for scope: ${current ? `${current.displayName} (${current.envId.id})` : "<none>"}`);
+    log.debug(`current env for scope: ${current ? `${current.displayName} (${current.envId.id})` : "<none>"}`);
     if (current?.envId.id === env.envId.id) {
-      log("  already correct → no change");
+      log.debug("already correct → no change");
       return;
     }
 
     if (seq !== runSeq) {
-      log("  superseded before set; aborting");
+      log.trace("superseded before set; aborting");
       return;
     }
     await api.setEnvironment(scope, env);
-    log(`  ✓ setEnvironment(${scopeUri?.fsPath ?? "<global>"}) → ${env.displayName} (${env.envId.id})`);
+    log.info(`switched env for ${scopeUri?.fsPath ?? "<global>"} → ${env.displayName} (${env.envId.id})`);
     if (showNotifications) {
       vscode.window.showInformationMessage(
         `Python Env Switcher: Python env → ${env.displayName}`,
       );
     }
   } catch (err) {
-    log(`  error: ${String(err)}`);
+    log.error(err instanceof Error ? err : new Error(String(err)));
   }
 }
 
 export function activate(context: vscode.ExtensionContext): void {
-  output = vscode.window.createOutputChannel("Python Env Switcher");
-  context.subscriptions.push(output);
-  log("activated");
+  log = vscode.window.createOutputChannel("Python Env Switcher", { log: true });
+  context.subscriptions.push(log);
+  log.info("activated");
 
   context.subscriptions.push(
     vscode.window.onDidChangeActiveTextEditor((editor) => {
-      log(`event: onDidChangeActiveTextEditor → ${editor?.document.uri.fsPath ?? "<none>"}`);
+      log.trace(`event: onDidChangeActiveTextEditor → ${editor?.document.uri.fsPath ?? "<none>"}`);
       void switchForEditor(editor);
     }),
   );
 
-  log("running initial switch for the current active editor");
+  log.trace("running initial switch for the current active editor");
   void switchForEditor(vscode.window.activeTextEditor);
 }
 
