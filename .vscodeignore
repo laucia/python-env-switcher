@@ -12,3 +12,7 @@ vsc-extension-quickstart.md
 **/*.map
 **/*.ts
 **/.vscode-test.*
+.husky/**
+.releaserc.json
+commitlint.config.js
+azure-pipelines.yml

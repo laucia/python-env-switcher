@@ -85,3 +85,23 @@ jobs:
         displayName: Release
         env:
           GH_TOKEN: $(GH_TOKEN)
+
+      # Publish to the VS Marketplace only when semantic-release actually cut a
+      # new version this run (i.e. a vX.Y.Z tag now points at HEAD). Auth uses
+      # Microsoft Entra ID via the service connection (no PAT) — the AzureCLI
+      # task logs in, and `vsce publish --azure-credential` reuses that session.
+      - task: AzureCLI@2
+        displayName: Publish to Marketplace
+        inputs:
+          azureSubscription: $(MARKETPLACE_SERVICE_CONNECTION)
+          scriptType: bash
+          scriptLocation: inlineScript
+          inlineScript: |
+            set -e
+            VERSION=$(node -p "require('./package.json').version")
+            if git tag --points-at HEAD | grep -qx "v$VERSION"; then
+              echo "Release v$VERSION detected; publishing to Marketplace"
+              npx vsce publish --azure-credential
+            else
+              echo "No new release this run; skipping Marketplace publish"
+            fi
