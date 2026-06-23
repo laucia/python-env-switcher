@@ -102,13 +102,13 @@ async function switchForEditor(
     log.trace(`skip: not python (languageId=${editor.document.languageId}) ${editor.document.uri.fsPath}`);
     return;
   }
-  const seq = ++runSeq;
-  const { venvName, scope: scopeSetting, showNotifications } = readSettings();
   const fileUri = editor.document.uri;
   if (fileUri.scheme !== "file") {
     log.trace(`skip: non-file scheme '${fileUri.scheme}'`);
     return;
   }
+  const seq = ++runSeq;
+  const { venvName, scope: scopeSetting, showNotifications } = readSettings();
   log.debug(`active: ${fileUri.fsPath} (scope=${scopeSetting}, venvName=${venvName})`);
 
   const workspaceFolder = vscode.workspace.getWorkspaceFolder(fileUri);
