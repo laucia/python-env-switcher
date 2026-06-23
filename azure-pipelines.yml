@@ -112,3 +112,23 @@ jobs:
           scriptType: bash
           scriptLocation: inlineScript
           inlineScript: npx vsce publish --azure-credential
+
+  # One-time setup helper (publishing-extension docs, step 5): prints the
+  # managed identity's Marketplace profile so you can add it as a member of the
+  # publisher. Run the pipeline once, read this job's output, then DELETE this
+  # job — it does not need to run on every release.
+  - job: identity_details
+    pool:
+      vmImage: ubuntu-latest
+    variables:
+      # MARKETPLACE_SERVICE_CONNECTION (the service connection name) lives here.
+      - group: VSCode Extension
+    steps:
+      - task: AzureCLI@2
+        displayName: Get identity details
+        inputs:
+          azureSubscription: $(MARKETPLACE_SERVICE_CONNECTION)
+          scriptType: pscore
+          scriptLocation: inlineScript
+          inlineScript: |
+            az rest -u https://app.vssps.visualstudio.com/_apis/profile/profiles/me --resource 499b84ac-1321-427f-aa17-267ca6975798
