@@ -3,6 +3,7 @@
   "displayName": "Python Env Switcher",
   "description": "Automatically switch to the relevant python virtual environment depending on the active file. Supports the Python Environment extension.",
   "version": "0.0.1",
+  "icon": "images/icon.png",
   "publisher": "laucia",
   "license": "MIT",
   "repository": {
